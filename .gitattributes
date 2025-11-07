@@ -1,0 +1,40 @@
+# ======================
+# 🔄 Line endings normalization
+# ======================
+# Always use LF line endings for consistency across OSes
+* text=auto eol=lf
+
+# ======================
+# 🐍 Python backend
+# ======================
+*.py text diff=python
+
+# ======================
+# ⚛️ Next.js frontend
+# ======================
+*.js text diff=javascript
+*.jsx text diff=javascript
+*.ts text diff=typescript
+*.tsx text diff=typescript
+*.css text diff=css
+*.html text diff=html
+*.json text diff=json
+
+# ======================
+# 📦 Configuration / Environment files
+# ======================
+*.env text
+*.md text diff=markdown
+*.yml text
+*.yaml text
+
+# ======================
+# 🧱 OS / Miscellaneous
+# ======================
+.DS_Store binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text diff=svg
