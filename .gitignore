@@ -1,12 +1,41 @@
-# Python
+# ======================
+# 🐍 Python
+# ======================
 venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
 
-# Node.js
-node_modules/
+# ======================
+# ⚛️ Node.js / Next.js
+# ======================
+frontend/node_modules/
 .next/
-.env.local
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# macOS
+# ======================
+# ⚙️ Environment & Config
+# ======================
+*.env
+*.env.local
+.env.development
+.env.production
+.env.test
+
+# ======================
+# 🍏 macOS
+# ======================
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# ======================
+# 🧰 Misc
+# ======================
+.idea/
+.vscode/
+*.swp
