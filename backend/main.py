@@ -78,13 +78,16 @@ def get_quote(symbol: str = "AAPL"):
             pass
 
     try:
-        ticker = yf.Ticker(symbol)
-        price = ticker.fast_info.last_price
+        info = yf.Ticker(symbol).fast_info
+        price = info.last_price
+        prev_close = info.previous_close
 
         if price is None:
             return {"error": f"找不到股票代號：{symbol}"}
 
         price = round(float(price), 2)
+        change = round(price - float(prev_close), 2) if prev_close else None
+        change_pct = round(change / float(prev_close) * 100, 2) if prev_close else None
 
         if r:
             try:
@@ -92,7 +95,7 @@ def get_quote(symbol: str = "AAPL"):
             except Exception:
                 pass
 
-        return {"symbol": symbol, "price": price, "source": "api"}
+        return {"symbol": symbol, "price": price, "change": change, "change_pct": change_pct, "source": "api"}
 
     except Exception as e:
         return {"error": f"查詢失敗：{e}"}
