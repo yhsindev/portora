@@ -21,6 +21,7 @@ export default function Home() {
   const [compareInput, setCompareInput] = useState("AAPL,TSLA,NVDA");
   const [compareData, setCompareData] = useState(null);
   const [compareLoading, setCompareLoading] = useState(false);
+  const [compareErr, setCompareErr] = useState("");
 
   useEffect(() => {
     refreshWatchlist();
@@ -58,14 +59,17 @@ export default function Home() {
   const fetchCompare = async () => {
     setCompareLoading(true);
     setCompareData(null);
+    setCompareErr("");
     try {
       const res = await fetch(
         `${BASE}/api/compare?symbols=${encodeURIComponent(compareInput)}&days=60`
       );
       const json = await res.json();
-      if (json.data) setCompareData(json.data);
+      if (json.error) throw new Error(json.error);
+      if (!json.data?.length) throw new Error("找不到任何股票資料，請確認代號是否正確");
+      setCompareData(json.data);
     } catch (e) {
-      // silent fail
+      setCompareErr(e.message || "比較失敗");
     } finally {
       setCompareLoading(false);
     }
@@ -261,6 +265,8 @@ export default function Home() {
               {compareLoading ? "載入中..." : "比較"}
             </button>
           </div>
+
+          {compareErr && <div className="text-xs text-red-400">錯誤：{compareErr}</div>}
 
           {compareData && (
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
