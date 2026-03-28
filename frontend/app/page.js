@@ -1,30 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import PriceChart from "@/components/PriceChart";
 import { sma, rsi } from "@/lib/indicators";
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+
 export default function Home() {
-  const [symbol, setSymbol] = useState("TSLA");
+  const [input, setInput] = useState("TSLA");
   const [data, setData] = useState(null);
   const [chartData, setChartData] = useState(null);
   const [rsiData, setRsiData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const fetchAll = async () => {
+  const [watchlist, setWatchlist] = useState([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(true);
+
+  useEffect(() => {
+    refreshWatchlist();
+  }, []);
+
+  const refreshWatchlist = async () => {
+    setWatchlistLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/watchlist/quotes`);
+      const json = await res.json();
+      setWatchlist(json.quotes || []);
+    } catch (e) {
+      // silent fail
+    } finally {
+      setWatchlistLoading(false);
+    }
+  };
+
+  const addToWatchlist = async (symbol) => {
+    await fetch(`${BASE}/api/watchlist?symbol=${encodeURIComponent(symbol)}`, {
+      method: "POST",
+    });
+    refreshWatchlist();
+  };
+
+  const removeFromWatchlist = async (symbol) => {
+    await fetch(`${BASE}/api/watchlist/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
+    });
+    setWatchlist((prev) => prev.filter((w) => w.symbol !== symbol));
+  };
+
+  const isInWatchlist = watchlist.some((w) => w.symbol === data?.symbol);
+
+  const fetchAll = async (sym) => {
+    const target = (sym || input).toUpperCase();
+    if (!target) return;
     setLoading(true);
     setErr("");
     setData(null);
     setChartData(null);
     setRsiData(null);
 
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
-
     try {
       const [quoteRes, histRes] = await Promise.all([
-        fetch(`${base}/api/quote?symbol=${encodeURIComponent(symbol)}`),
-        fetch(`${base}/api/history?symbol=${encodeURIComponent(symbol)}&days=120`),
+        fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(target)}`),
+        fetch(`${BASE}/api/history?symbol=${encodeURIComponent(target)}&days=120`),
       ]);
 
       const quoteJson = await quoteRes.json();
@@ -65,17 +103,73 @@ export default function Home() {
       <div className="max-w-3xl mx-auto space-y-4">
         <h1 className="text-xl font-semibold">Portora · 智慧選股儀表板</h1>
 
+        {/* 自選股區塊 */}
+        {(watchlist.length > 0 || watchlistLoading) && (
+          <div className="space-y-2">
+            <div className="text-xs text-slate-400 font-medium uppercase tracking-wide">
+              自選股
+            </div>
+            {watchlistLoading ? (
+              <div className="text-xs text-slate-600">載入中...</div>
+            ) : (
+              <div className="flex gap-2 flex-wrap">
+                {watchlist.map((w) => (
+                  <button
+                    key={w.symbol}
+                    onClick={() => {
+                      setInput(w.symbol);
+                      fetchAll(w.symbol);
+                    }}
+                    className={`group flex items-center gap-2 border rounded-2xl px-3 py-2 text-sm transition ${
+                      data?.symbol === w.symbol
+                        ? "bg-indigo-500/20 border-indigo-500"
+                        : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                    }`}
+                  >
+                    <span className="font-medium">{w.symbol}</span>
+                    {w.price != null ? (
+                      <>
+                        <span className="text-slate-300">${w.price}</span>
+                        <span
+                          className={
+                            w.change_pct >= 0 ? "text-green-400" : "text-red-400"
+                          }
+                        >
+                          {w.change_pct >= 0 ? "+" : ""}
+                          {w.change_pct}%
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-slate-600 text-xs">N/A</span>
+                    )}
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeFromWatchlist(w.symbol);
+                      }}
+                      className="text-slate-600 hover:text-red-400 text-xs transition ml-1"
+                    >
+                      ✕
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 搜尋列 */}
         <div className="flex gap-2">
           <input
             className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            value={input}
+            onChange={(e) => setInput(e.target.value.toUpperCase())}
             placeholder="例如：TSLA、AAPL、2330.TW"
             onKeyDown={(e) => e.key === "Enter" && fetchAll()}
           />
           <button
-            onClick={fetchAll}
-            disabled={loading || !symbol}
+            onClick={() => fetchAll()}
+            disabled={loading || !input}
             className="px-4 py-2 rounded-2xl bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 text-sm font-medium transition"
           >
             {loading ? "查詢中..." : "查詢"}
@@ -84,19 +178,37 @@ export default function Home() {
 
         {err && <div className="text-xs text-red-400">錯誤：{err}</div>}
 
+        {/* 股價卡片 */}
         {data && (
-          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4">
-            <div className="text-slate-400 text-xs mb-1">{data.symbol}</div>
-            <div className="text-3xl font-bold">${data.price}</div>
-            <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
+          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex items-start justify-between">
+            <div>
+              <div className="text-slate-400 text-xs mb-1">{data.symbol}</div>
+              <div className="text-3xl font-bold">${data.price}</div>
+              <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
+            </div>
+            <button
+              onClick={() =>
+                isInWatchlist
+                  ? removeFromWatchlist(data.symbol)
+                  : addToWatchlist(data.symbol)
+              }
+              className={`text-xs px-3 py-1.5 rounded-xl border transition ${
+                isInWatchlist
+                  ? "border-red-500/50 text-red-400 hover:bg-red-500/10"
+                  : "border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
+              }`}
+            >
+              {isInWatchlist ? "移除自選" : "+ 加入自選"}
+            </button>
           </div>
         )}
 
+        {/* K 線圖 */}
         {chartData && (
           <PriceChart data={chartData} rsiData={rsiData} showMA20 showMA50 />
         )}
 
-        {!data && !err && !loading && (
+        {!data && !err && !loading && watchlist.length === 0 && (
           <p className="text-xs text-slate-500">
             支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）
           </p>

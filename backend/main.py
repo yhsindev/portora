@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 import yfinance as yf
 import os
+import json
 import redis
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -31,6 +33,22 @@ try:
     r.ping()
 except Exception:
     r = None
+
+# 自選股清單檔案路徑
+WATCHLIST_FILE = Path(__file__).parent / "watchlist.json"
+
+
+def load_watchlist() -> list[str]:
+    if not WATCHLIST_FILE.exists():
+        return []
+    try:
+        return json.loads(WATCHLIST_FILE.read_text())
+    except Exception:
+        return []
+
+
+def save_watchlist(symbols: list[str]):
+    WATCHLIST_FILE.write_text(json.dumps(symbols))
 
 
 # 根路由
@@ -102,3 +120,59 @@ def get_history(symbol: str = "AAPL", days: int = 120):
 
     except Exception as e:
         return {"error": f"查詢失敗：{e}"}
+
+
+# 取得自選股清單
+@app.get("/api/watchlist")
+def get_watchlist():
+    return {"symbols": load_watchlist()}
+
+
+# 新增股票到自選股
+@app.post("/api/watchlist")
+def add_to_watchlist(symbol: str):
+    symbol = symbol.upper()
+    symbols = load_watchlist()
+    if symbol not in symbols:
+        symbols.append(symbol)
+        save_watchlist(symbols)
+    return {"symbols": symbols}
+
+
+# 從自選股移除股票
+@app.delete("/api/watchlist/{symbol}")
+def remove_from_watchlist(symbol: str):
+    symbol = symbol.upper()
+    symbols = [s for s in load_watchlist() if s != symbol]
+    save_watchlist(symbols)
+    return {"symbols": symbols}
+
+
+# 批次取得自選股即時報價
+@app.get("/api/watchlist/quotes")
+def get_watchlist_quotes():
+    symbols = load_watchlist()
+    if not symbols:
+        return {"quotes": []}
+
+    quotes = []
+    for symbol in symbols:
+        try:
+            info = yf.Ticker(symbol).fast_info
+            price = info.last_price
+            prev_close = info.previous_close
+            if price is not None and prev_close:
+                change = round(float(price) - float(prev_close), 2)
+                change_pct = round(change / float(prev_close) * 100, 2)
+            else:
+                change = change_pct = None
+            quotes.append({
+                "symbol": symbol,
+                "price": round(float(price), 2) if price else None,
+                "change": change,
+                "change_pct": change_pct,
+            })
+        except Exception:
+            quotes.append({"symbol": symbol, "price": None, "change": None, "change_pct": None})
+
+    return {"quotes": quotes}
