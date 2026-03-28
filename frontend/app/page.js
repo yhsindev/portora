@@ -183,7 +183,14 @@ export default function Home() {
           <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex items-start justify-between">
             <div>
               <div className="text-slate-400 text-xs mb-1">{data.symbol}</div>
-              <div className="text-3xl font-bold">${data.price}</div>
+              <div className="flex items-baseline gap-3">
+                <div className="text-3xl font-bold">${data.price}</div>
+                {data.change_pct != null && (
+                  <div className={`text-sm font-medium ${data.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {data.change >= 0 ? "+" : ""}{data.change} ({data.change_pct >= 0 ? "+" : ""}{data.change_pct}%)
+                  </div>
+                )}
+              </div>
               <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
             </div>
             <button
