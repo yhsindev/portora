@@ -62,6 +62,10 @@ export default function CompareChart({ data }) {
             axisLine={false}
             tickLine={false}
             width={48}
+            domain={([dataMin, dataMax]) => [
+              Math.floor(dataMin - 3),
+              Math.ceil(dataMax + 3),
+            ]}
             tickFormatter={(v) => `${v >= 100 ? "+" : ""}${(v - 100).toFixed(0)}%`}
           />
           <Tooltip content={<CustomTooltip />} />
