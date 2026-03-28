@@ -157,6 +157,44 @@ def remove_from_watchlist(symbol: str):
     return {"symbols": symbols}
 
 
+# 多股比較（正規化到起點 100）
+@app.get("/api/compare")
+def compare_stocks(symbols: str = "AAPL,TSLA", days: int = 60):
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()][:5]
+
+    result = []
+    for symbol in symbol_list:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period=f"{days}d")
+            if hist.empty:
+                continue
+
+            closes = [round(float(c), 2) for c in hist["Close"]]
+            dates = [d.strftime("%Y-%m-%d") for d in hist.index]
+            base = closes[0]
+            normalized = [round(c / base * 100, 2) for c in closes]
+
+            info = ticker.fast_info
+            price = info.last_price
+            prev_close = info.previous_close
+            change_pct = round((float(price) - float(prev_close)) / float(prev_close) * 100, 2) if prev_close and price else None
+            total_return = round((closes[-1] / closes[0] - 1) * 100, 2)
+
+            result.append({
+                "symbol": symbol,
+                "dates": dates,
+                "normalized": normalized,
+                "price": round(float(price), 2) if price else None,
+                "change_pct": change_pct,
+                "total_return": total_return,
+            })
+        except Exception:
+            continue
+
+    return {"data": result}
+
+
 # 批次取得自選股即時報價
 @app.get("/api/watchlist/quotes")
 def get_watchlist_quotes():
