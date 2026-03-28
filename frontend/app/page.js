@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import PriceChart from "@/components/PriceChart";
+import CompareChart from "@/components/CompareChart";
 import { sma, rsi } from "@/lib/indicators";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
@@ -16,6 +17,10 @@ export default function Home() {
 
   const [watchlist, setWatchlist] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
+
+  const [compareInput, setCompareInput] = useState("AAPL,TSLA,NVDA");
+  const [compareData, setCompareData] = useState(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   useEffect(() => {
     refreshWatchlist();
@@ -49,6 +54,22 @@ export default function Home() {
   };
 
   const isInWatchlist = watchlist.some((w) => w.symbol === data?.symbol);
+
+  const fetchCompare = async () => {
+    setCompareLoading(true);
+    setCompareData(null);
+    try {
+      const res = await fetch(
+        `${BASE}/api/compare?symbols=${encodeURIComponent(compareInput)}&days=60`
+      );
+      const json = await res.json();
+      if (json.data) setCompareData(json.data);
+    } catch (e) {
+      // silent fail
+    } finally {
+      setCompareLoading(false);
+    }
+  };
 
   const fetchAll = async (sym) => {
     const target = (sym || input).toUpperCase();
@@ -220,6 +241,58 @@ export default function Home() {
             支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）
           </p>
         )}
+
+        {/* 多股比較區塊 */}
+        <div className="border-t border-slate-800 pt-4 space-y-3">
+          <div className="text-sm font-medium text-slate-300">多股比較</div>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={compareInput}
+              onChange={(e) => setCompareInput(e.target.value.toUpperCase())}
+              placeholder="用逗號分隔，例如：AAPL,TSLA,NVDA"
+              onKeyDown={(e) => e.key === "Enter" && fetchCompare()}
+            />
+            <button
+              onClick={fetchCompare}
+              disabled={compareLoading || !compareInput}
+              className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
+            >
+              {compareLoading ? "載入中..." : "比較"}
+            </button>
+          </div>
+
+          {compareData && (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
+              <div className="text-xs text-slate-400">60 天相對報酬（起點 = 0%）</div>
+              <CompareChart data={compareData} />
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-slate-500 border-b border-slate-800">
+                    <th className="text-left py-1">代號</th>
+                    <th className="text-right py-1">現價</th>
+                    <th className="text-right py-1">今日</th>
+                    <th className="text-right py-1">60 天報酬</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compareData.map((d) => (
+                    <tr key={d.symbol} className="border-b border-slate-800/50">
+                      <td className="py-1.5 font-medium">{d.symbol}</td>
+                      <td className="text-right text-slate-300">${d.price ?? "—"}</td>
+                      <td className={`text-right ${d.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {d.change_pct != null ? `${d.change_pct >= 0 ? "+" : ""}${d.change_pct}%` : "—"}
+                      </td>
+                      <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {d.total_return >= 0 ? "+" : ""}{d.total_return}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
