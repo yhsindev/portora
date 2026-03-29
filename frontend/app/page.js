@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import PriceChart from "@/components/PriceChart";
 import CompareChart from "@/components/CompareChart";
+import PortfolioSection from "@/components/PortfolioSection";
 import { sma, rsi } from "@/lib/indicators";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
@@ -295,6 +296,9 @@ export default function Home() {
             支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）
           </p>
         )}
+
+        {/* 投資組合追蹤 */}
+        <PortfolioSection />
 
         {/* ETF 長期分析區塊 */}
         <div className="border-t border-slate-800 pt-4 space-y-3">
