@@ -2,6 +2,8 @@ from fastapi import FastAPI
 import yfinance as yf
 import os
 import json
+import math
+import statistics
 import redis
 from pathlib import Path
 from dotenv import load_dotenv
@@ -155,6 +157,73 @@ def remove_from_watchlist(symbol: str):
     symbols = [s for s in load_watchlist() if s != symbol]
     save_watchlist(symbols)
     return {"symbols": symbols}
+
+
+# ETF 長期分析
+@app.get("/api/etf")
+def etf_analysis(symbols: str = "VOO,0050.TW,006208.TW", period: str = "1y"):
+    symbol_list = [s.strip().upper() for s in symbols.split(",") if s.strip()][:5]
+
+    # 期間對應年數（用來算 CAGR）
+    period_years = {"1mo": 1/12, "3mo": 3/12, "6mo": 0.5, "1y": 1, "3y": 3, "5y": 5}
+    years = period_years.get(period, 1)
+
+    result = []
+    for symbol in symbol_list:
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period=period)
+            if hist.empty or len(hist) < 2:
+                continue
+
+            closes = [float(c) for c in hist["Close"]]
+            dates = [d.strftime("%Y-%m-%d") for d in hist.index]
+            base = closes[0]
+            normalized = [round(c / base * 100, 2) for c in closes]
+
+            # 總報酬
+            total_return = round((closes[-1] / closes[0] - 1) * 100, 2)
+
+            # 年化報酬 CAGR（不足半年直接用總報酬）
+            cagr = round(((closes[-1] / closes[0]) ** (1 / years) - 1) * 100, 2) if years >= 0.5 else total_return
+
+            # 最大回撤（Max Drawdown）
+            peak, max_dd = closes[0], 0
+            for price in closes:
+                if price > peak:
+                    peak = price
+                dd = (peak - price) / peak
+                if dd > max_dd:
+                    max_dd = dd
+            max_drawdown = round(-max_dd * 100, 2)
+
+            # 夏普比率（年化，無風險利率設 0）
+            daily_returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
+            avg_r = statistics.mean(daily_returns)
+            std_r = statistics.stdev(daily_returns) if len(daily_returns) > 1 else None
+            sharpe = round((avg_r / std_r) * math.sqrt(252), 2) if std_r else None
+
+            # 股息殖利率
+            try:
+                div_yield = ticker.info.get("dividendYield")
+                div_yield = round(div_yield * 100, 2) if div_yield else None
+            except Exception:
+                div_yield = None
+
+            result.append({
+                "symbol": symbol,
+                "dates": dates,
+                "normalized": normalized,
+                "total_return": total_return,
+                "cagr": cagr,
+                "max_drawdown": max_drawdown,
+                "sharpe": sharpe,
+                "div_yield": div_yield,
+            })
+        except Exception:
+            continue
+
+    return {"data": result, "period": period}
 
 
 # 多股比較（正規化到起點 100）
