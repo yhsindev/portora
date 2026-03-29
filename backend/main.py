@@ -264,7 +264,40 @@ def compare_stocks(symbols: str = "AAPL,TSLA", days: int = 60):
     return {"data": result}
 
 
-# 批次取得自選股即時報價
+# 個股新聞（yfinance .news，無需額外 API key）
+@app.get("/api/news")
+def get_news(symbol: str = "AAPL"):
+    symbol = symbol.upper()
+    try:
+        raw = yf.Ticker(symbol).news or []
+        news = []
+        for item in raw[:5]:  # 最多取 5 則
+            # yfinance 新舊版本的資料結構不同，兩種都處理
+            content = item.get("content") or item
+            title   = content.get("title")
+            link    = (content.get("canonicalUrl") or {}).get("url") or content.get("link") or ""
+            pub     = (content.get("provider") or {}).get("displayName") or content.get("publisher") or ""
+            t       = content.get("pubDate") or content.get("providerPublishTime")
+            # pubDate 是 ISO 字串，providerPublishTime 是 Unix 秒數
+            if isinstance(t, (int, float)):
+                ts = int(t)
+            elif isinstance(t, str):
+                from datetime import datetime, timezone
+                try:
+                    ts = int(datetime.fromisoformat(t.replace("Z", "+00:00")).timestamp())
+                except Exception:
+                    ts = None
+            else:
+                ts = None
+
+            if title:
+                news.append({"title": title, "link": link, "publisher": pub, "time": ts})
+
+        return {"symbol": symbol, "news": news}
+    except Exception as e:
+        return {"error": f"查詢失敗：{e}"}
+
+
 @app.get("/api/watchlist/quotes")
 def get_watchlist_quotes():
     symbols = load_watchlist()

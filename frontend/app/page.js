@@ -9,6 +9,14 @@ import { sma, rsi } from "@/lib/indicators";
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 const LS_KEY = "portora_watchlist";
 
+// Unix 秒數 → 「3 小時前」「2 天前」
+function timeAgo(ts) {
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 3600)  return `${Math.floor(diff / 60)} 分鐘前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
+  return `${Math.floor(diff / 86400)} 天前`;
+}
+
 // localStorage 輔助函式：讀取自選股代號陣列
 function loadSymbols() {
   try {
@@ -30,6 +38,8 @@ export default function Home() {
   const [rsiData, setRsiData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+
+  const [news, setNews] = useState([]);
 
   const [watchlist, setWatchlist] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
@@ -134,15 +144,22 @@ export default function Home() {
     setData(null);
     setChartData(null);
     setRsiData(null);
+    setNews([]);
 
     try {
-      const [quoteRes, histRes] = await Promise.all([
+      const [quoteRes, histRes, newsRes] = await Promise.all([
         fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(target)}`),
         fetch(`${BASE}/api/history?symbol=${encodeURIComponent(target)}&days=120`),
+        fetch(`${BASE}/api/news?symbol=${encodeURIComponent(target)}`),
       ]);
 
       const quoteJson = await quoteRes.json();
-      const histJson = await histRes.json();
+      const histJson  = await histRes.json();
+      const newsJson  = await newsRes.json();
+
+      if (!newsJson.error && newsJson.news?.length) {
+        setNews(newsJson.news);
+      }
 
       if (quoteJson.error) throw new Error(quoteJson.error);
       setData(quoteJson);
@@ -289,6 +306,29 @@ export default function Home() {
         {/* K 線圖 */}
         {chartData && (
           <PriceChart data={chartData} rsiData={rsiData} showMA20 showMA50 />
+        )}
+
+        {/* 個股新聞 */}
+        {news.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">最新消息</div>
+            {news.map((n, i) => (
+              <a
+                key={i}
+                href={n.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2.5 hover:border-slate-600 transition group"
+              >
+                <div className="text-sm text-slate-200 group-hover:text-white leading-snug">
+                  {n.title}
+                </div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {n.publisher}{n.time ? ` · ${timeAgo(n.time)}` : ""}
+                </div>
+              </a>
+            ))}
+          </div>
         )}
 
         {!data && !err && !loading && watchlist.length === 0 && (
