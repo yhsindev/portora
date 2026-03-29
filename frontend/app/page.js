@@ -18,7 +18,7 @@ export default function Home() {
   const [watchlist, setWatchlist] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
 
-  const [etfInput] = useState("VOO,0050.TW,006208.TW");
+  const [etfInput, setEtfInput] = useState("VOO,0050.TW,006208.TW");
   const [etfPeriod, setEtfPeriod] = useState("1y");
   const [etfData, setEtfData] = useState(null);
   const [etfLoading, setEtfLoading] = useState(false);
@@ -274,9 +274,7 @@ export default function Home() {
         {/* ETF 長期分析區塊 */}
         <div className="border-t border-slate-800 pt-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-300">ETF 長期分析
-              <span className="text-xs text-slate-500 ml-2">VOO・0050・006208</span>
-            </div>
+            <div className="text-sm font-medium text-slate-300">ETF 長期分析</div>
             <div className="flex gap-1">
               {[["1mo","1M"],["3mo","3M"],["6mo","6M"],["1y","1Y"],["3y","3Y"],["5y","5Y"]].map(([val, label]) => (
                 <button
@@ -294,14 +292,22 @@ export default function Home() {
             </div>
           </div>
 
-          {!etfData && !etfLoading && !etfErr && (
+          <div className="flex gap-2">
+            <input
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              value={etfInput}
+              onChange={(e) => setEtfInput(e.target.value.toUpperCase())}
+              placeholder="最多 5 檔，逗號分隔，例如：VOO,VTI,QQQ,0050.TW"
+              onKeyDown={(e) => e.key === "Enter" && fetchEtf()}
+            />
             <button
               onClick={() => fetchEtf()}
-              className="w-full py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-sm text-slate-400 transition"
+              disabled={etfLoading || !etfInput}
+              className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
             >
-              點擊載入分析
+              {etfLoading ? "載入中..." : "分析"}
             </button>
-          )}
+          </div>
           {etfLoading && <div className="text-xs text-slate-500">載入中...</div>}
           {etfErr && <div className="text-xs text-red-400">錯誤：{etfErr}</div>}
 
