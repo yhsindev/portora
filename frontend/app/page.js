@@ -18,6 +18,12 @@ export default function Home() {
   const [watchlist, setWatchlist] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
 
+  const [etfInput] = useState("VOO,0050.TW,006208.TW");
+  const [etfPeriod, setEtfPeriod] = useState("1y");
+  const [etfData, setEtfData] = useState(null);
+  const [etfLoading, setEtfLoading] = useState(false);
+  const [etfErr, setEtfErr] = useState("");
+
   const [compareInput, setCompareInput] = useState("AAPL,TSLA,NVDA");
   const [compareData, setCompareData] = useState(null);
   const [compareLoading, setCompareLoading] = useState(false);
@@ -55,6 +61,25 @@ export default function Home() {
   };
 
   const isInWatchlist = watchlist.some((w) => w.symbol === data?.symbol);
+
+  const fetchEtf = async (period = etfPeriod) => {
+    setEtfLoading(true);
+    setEtfData(null);
+    setEtfErr("");
+    try {
+      const res = await fetch(
+        `${BASE}/api/etf?symbols=${encodeURIComponent(etfInput)}&period=${period}`
+      );
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      if (!json.data?.length) throw new Error("查無資料");
+      setEtfData(json.data);
+    } catch (e) {
+      setEtfErr(e.message || "載入失敗");
+    } finally {
+      setEtfLoading(false);
+    }
+  };
 
   const fetchCompare = async () => {
     setCompareLoading(true);
@@ -245,6 +270,75 @@ export default function Home() {
             支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）
           </p>
         )}
+
+        {/* ETF 長期分析區塊 */}
+        <div className="border-t border-slate-800 pt-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-slate-300">ETF 長期分析
+              <span className="text-xs text-slate-500 ml-2">VOO・0050・006208</span>
+            </div>
+            <div className="flex gap-1">
+              {[["1mo","1M"],["3mo","3M"],["6mo","6M"],["1y","1Y"],["3y","3Y"],["5y","5Y"]].map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => { setEtfPeriod(val); fetchEtf(val); }}
+                  className={`px-2 py-1 rounded-lg text-xs transition ${
+                    etfPeriod === val
+                      ? "bg-indigo-500 text-white"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!etfData && !etfLoading && !etfErr && (
+            <button
+              onClick={() => fetchEtf()}
+              className="w-full py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 text-sm text-slate-400 transition"
+            >
+              點擊載入分析
+            </button>
+          )}
+          {etfLoading && <div className="text-xs text-slate-500">載入中...</div>}
+          {etfErr && <div className="text-xs text-red-400">錯誤：{etfErr}</div>}
+
+          {etfData && (
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
+              <CompareChart data={etfData} />
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-slate-500 border-b border-slate-800">
+                    <th className="text-left py-1">ETF</th>
+                    <th className="text-right py-1">總報酬</th>
+                    <th className="text-right py-1">年化(CAGR)</th>
+                    <th className="text-right py-1">最大回撤</th>
+                    <th className="text-right py-1">夏普</th>
+                    <th className="text-right py-1">殖利率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {etfData.map((d) => (
+                    <tr key={d.symbol} className="border-b border-slate-800/50">
+                      <td className="py-1.5 font-medium">{d.symbol}</td>
+                      <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {d.total_return >= 0 ? "+" : ""}{d.total_return}%
+                      </td>
+                      <td className={`text-right ${d.cagr >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {d.cagr >= 0 ? "+" : ""}{d.cagr}%
+                      </td>
+                      <td className="text-right text-red-400">{d.max_drawdown}%</td>
+                      <td className="text-right text-slate-300">{d.sharpe ?? "—"}</td>
+                      <td className="text-right text-slate-300">{d.div_yield != null ? `${d.div_yield}%` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
 
         {/* 多股比較區塊 */}
         <div className="border-t border-slate-800 pt-4 space-y-3">
