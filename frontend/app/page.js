@@ -6,6 +6,21 @@ import CompareChart from "@/components/CompareChart";
 import { sma, rsi } from "@/lib/indicators";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const LS_KEY = "portora_watchlist";
+
+// localStorage 輔助函式：讀取自選股代號陣列
+function loadSymbols() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+// localStorage 輔助函式：儲存自選股代號陣列
+function saveSymbols(symbols) {
+  localStorage.setItem(LS_KEY, JSON.stringify(symbols));
+}
 
 export default function Home() {
   const [input, setInput] = useState("TSLA");
@@ -33,12 +48,23 @@ export default function Home() {
     refreshWatchlist();
   }, []);
 
+  // 從 localStorage 讀出代號，並行呼叫後端取得即時報價
   const refreshWatchlist = async () => {
     setWatchlistLoading(true);
     try {
-      const res = await fetch(`${BASE}/api/watchlist/quotes`);
-      const json = await res.json();
-      setWatchlist(json.quotes || []);
+      const symbols = loadSymbols();
+      if (symbols.length === 0) {
+        setWatchlist([]);
+        return;
+      }
+      const results = await Promise.all(
+        symbols.map((sym) =>
+          fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(sym)}`)
+            .then((r) => r.json())
+            .catch(() => ({ symbol: sym, price: null, change_pct: null }))
+        )
+      );
+      setWatchlist(results.filter((r) => !r.error));
     } catch (e) {
       // silent fail
     } finally {
@@ -46,17 +72,16 @@ export default function Home() {
     }
   };
 
-  const addToWatchlist = async (symbol) => {
-    await fetch(`${BASE}/api/watchlist?symbol=${encodeURIComponent(symbol)}`, {
-      method: "POST",
-    });
+  const addToWatchlist = (symbol) => {
+    const symbols = loadSymbols();
+    if (!symbols.includes(symbol)) {
+      saveSymbols([...symbols, symbol]);
+    }
     refreshWatchlist();
   };
 
-  const removeFromWatchlist = async (symbol) => {
-    await fetch(`${BASE}/api/watchlist/${encodeURIComponent(symbol)}`, {
-      method: "DELETE",
-    });
+  const removeFromWatchlist = (symbol) => {
+    saveSymbols(loadSymbols().filter((s) => s !== symbol));
     setWatchlist((prev) => prev.filter((w) => w.symbol !== symbol));
   };
 
