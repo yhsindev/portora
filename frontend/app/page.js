@@ -48,6 +48,7 @@ export default function Home() {
   const [watchlistLoading, setWatchlistLoading] = useState(true);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
   const [groupInput, setGroupInput] = useState("自選股");
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   const [etfInput, setEtfInput] = useState("VOO,0050.TW,006208.TW");
   const [etfPeriod, setEtfPeriod] = useState("1y");
@@ -275,7 +276,16 @@ export default function Home() {
                 }, {})
               ).map(([group, stocks]) => (
                 <div key={group} className="space-y-1.5">
-                  <div className="text-xs text-slate-500 font-medium">{group}</div>
+                  {/* 群組標題：點擊收合/展開 */}
+                  <button
+                    onClick={() => setCollapsedGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition font-medium"
+                  >
+                    <span>{collapsedGroups[group] ? "▶" : "▼"}</span>
+                    <span>{group}</span>
+                    <span className="text-slate-700">({stocks.length})</span>
+                  </button>
+                  {!collapsedGroups[group] && (
                   <div className="flex gap-2 flex-wrap">
                     {stocks.map((w) => (
                       <button
@@ -305,6 +315,7 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
+                  )}
                 </div>
               ))
             )}
