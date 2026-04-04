@@ -10,6 +10,21 @@ import { sma, rsi } from "@/lib/indicators";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 const LS_KEY = "portora_watchlist";
+const LS_NOTES_KEY = "portora_notes";
+
+function loadNote(symbol) {
+  try {
+    return JSON.parse(localStorage.getItem(LS_NOTES_KEY) || "{}")[symbol] || "";
+  } catch { return ""; }
+}
+function saveNote(symbol, text) {
+  try {
+    const notes = JSON.parse(localStorage.getItem(LS_NOTES_KEY) || "{}");
+    if (text) notes[symbol] = text;
+    else delete notes[symbol];
+    localStorage.setItem(LS_NOTES_KEY, JSON.stringify(notes));
+  } catch {}
+}
 
 // Unix 秒數 → 「3 小時前」「2 天前」
 function timeAgo(ts) {
@@ -42,6 +57,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  const [note, setNote] = useState("");
+  const [noteSaved, setNoteSaved] = useState(true);
+
   const [news, setNews] = useState([]);
 
   const [watchlist, setWatchlist] = useState([]);
@@ -72,7 +90,15 @@ export default function Home() {
 
   useEffect(() => {
     refreshWatchlist();
-  }, [session]); // session 改變（登入/登出）時重新載入自選股
+  }, [session]);
+
+  // 切換股票時載入對應備忘
+  useEffect(() => {
+    if (data?.symbol) {
+      setNote(loadNote(data.symbol));
+      setNoteSaved(true);
+    }
+  }, [data?.symbol]);
 
   const refreshWatchlist = async () => {
     setWatchlistLoading(true);
@@ -422,6 +448,35 @@ export default function Home() {
                     className="text-xs px-3 py-1.5 rounded-xl border border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 transition"
                   >+ 加入自選</button>
                 )}
+              </div>
+            )}
+
+            {/* 個股備忘 */}
+            {!loading && data && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-slate-500">備忘</div>
+                  {!noteSaved && (
+                    <div className="text-xs text-slate-600">未儲存</div>
+                  )}
+                  {noteSaved && note && (
+                    <div className="text-xs text-indigo-500/60">已儲存</div>
+                  )}
+                </div>
+                <textarea
+                  className="w-full bg-slate-900/50 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-300 placeholder-slate-600 outline-none focus:border-slate-600 resize-none transition"
+                  rows={2}
+                  placeholder="記錄買入理由、目標價、觀察重點..."
+                  value={note}
+                  onChange={(e) => {
+                    setNote(e.target.value);
+                    setNoteSaved(false);
+                  }}
+                  onBlur={() => {
+                    saveNote(data.symbol, note);
+                    setNoteSaved(true);
+                  }}
+                />
               </div>
             )}
 
