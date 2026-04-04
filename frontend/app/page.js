@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import PriceChart from "@/components/PriceChart";
 import CompareChart from "@/components/CompareChart";
 import PortfolioSection from "@/components/PortfolioSection";
+import { SkeletonCard, SkeletonChart, SkeletonNews } from "@/components/Skeleton";
 import { sma, rsi } from "@/lib/indicators";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
@@ -54,6 +55,15 @@ export default function Home() {
   const [compareData, setCompareData] = useState(null);
   const [compareLoading, setCompareLoading] = useState(false);
   const [compareErr, setCompareErr] = useState("");
+
+  const [activeTab, setActiveTab] = useState("stock");
+
+  const TABS = [
+    { id: "stock",     label: "個股" },
+    { id: "portfolio", label: "投資組合" },
+    { id: "etf",       label: "ETF 分析" },
+    { id: "compare",   label: "多股比較" },
+  ];
 
   useEffect(() => {
     refreshWatchlist();
@@ -192,18 +202,22 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-50 p-6">
-      <div className="max-w-3xl mx-auto space-y-4">
-        <h1 className="text-xl font-semibold">Portora · 智慧選股儀表板</h1>
+    <main className="min-h-screen bg-slate-950 text-slate-50">
+      <div className="max-w-3xl mx-auto px-4 pt-6 pb-12 space-y-4">
 
-        {/* 自選股區塊 */}
+        {/* Header */}
+        <h1 className="text-xl font-semibold tracking-tight">Portora</h1>
+
+        {/* 自選股（常駐於所有 Tab 上方，點擊自動切到個股 Tab） */}
         {(watchlist.length > 0 || watchlistLoading) && (
           <div className="space-y-2">
-            <div className="text-xs text-slate-400 font-medium uppercase tracking-wide">
-              自選股
-            </div>
+            <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">自選股</div>
             {watchlistLoading ? (
-              <div className="text-xs text-slate-600">載入中...</div>
+              <div className="flex gap-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-9 w-28 bg-slate-800 rounded-2xl animate-pulse" />
+                ))}
+              </div>
             ) : (
               <div className="flex gap-2 flex-wrap">
                 {watchlist.map((w) => (
@@ -211,6 +225,7 @@ export default function Home() {
                     key={w.symbol}
                     onClick={() => {
                       setInput(w.symbol);
+                      setActiveTab("stock");
                       fetchAll(w.symbol);
                     }}
                     className={`group flex items-center gap-2 border rounded-2xl px-3 py-2 text-sm transition ${
@@ -223,27 +238,17 @@ export default function Home() {
                     {w.price != null ? (
                       <>
                         <span className="text-slate-300">${w.price}</span>
-                        <span
-                          className={
-                            w.change_pct >= 0 ? "text-green-400" : "text-red-400"
-                          }
-                        >
-                          {w.change_pct >= 0 ? "+" : ""}
-                          {w.change_pct}%
+                        <span className={w.change_pct >= 0 ? "text-green-400" : "text-red-400"}>
+                          {w.change_pct >= 0 ? "+" : ""}{w.change_pct}%
                         </span>
                       </>
                     ) : (
                       <span className="text-slate-600 text-xs">N/A</span>
                     )}
                     <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromWatchlist(w.symbol);
-                      }}
+                      onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.symbol); }}
                       className="text-slate-600 hover:text-red-400 text-xs transition ml-1"
-                    >
-                      ✕
-                    </span>
+                    >✕</span>
                   </button>
                 ))}
               </div>
@@ -251,223 +256,251 @@ export default function Home() {
           </div>
         )}
 
-        {/* 搜尋列 */}
-        <div className="flex gap-2">
-          <input
-            className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
-            value={input}
-            onChange={(e) => setInput(e.target.value.toUpperCase())}
-            placeholder="例如：TSLA、AAPL、2330.TW"
-            onKeyDown={(e) => e.key === "Enter" && fetchAll()}
-          />
-          <button
-            onClick={() => fetchAll()}
-            disabled={loading || !input}
-            className="px-4 py-2 rounded-2xl bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 text-sm font-medium transition"
-          >
-            {loading ? "查詢中..." : "查詢"}
-          </button>
-        </div>
-
-        {err && <div className="text-xs text-red-400">錯誤：{err}</div>}
-
-        {/* 股價卡片 */}
-        {data && (
-          <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex items-start justify-between">
-            <div>
-              <div className="text-slate-400 text-xs mb-1">{data.symbol}</div>
-              <div className="flex items-baseline gap-3">
-                <div className="text-3xl font-bold">${data.price}</div>
-                {data.change_pct != null && (
-                  <div className={`text-sm font-medium ${data.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {data.change >= 0 ? "+" : ""}{data.change} ({data.change_pct >= 0 ? "+" : ""}{data.change_pct}%)
-                  </div>
-                )}
-              </div>
-              <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
-            </div>
+        {/* Tab 切換列 */}
+        <div className="flex border-b border-slate-800">
+          {TABS.map((tab) => (
             <button
-              onClick={() =>
-                isInWatchlist
-                  ? removeFromWatchlist(data.symbol)
-                  : addToWatchlist(data.symbol)
-              }
-              className={`text-xs px-3 py-1.5 rounded-xl border transition ${
-                isInWatchlist
-                  ? "border-red-500/50 text-red-400 hover:bg-red-500/10"
-                  : "border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? "border-indigo-500 text-white"
+                  : "border-transparent text-slate-500 hover:text-slate-300"
               }`}
             >
-              {isInWatchlist ? "移除自選" : "+ 加入自選"}
+              {tab.label}
             </button>
-          </div>
-        )}
+          ))}
+        </div>
 
-        {/* K 線圖 */}
-        {chartData && (
-          <PriceChart data={chartData} rsiData={rsiData} showMA20 showMA50 />
-        )}
-
-        {/* 個股新聞 */}
-        {news.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">最新消息</div>
-            {news.map((n, i) => (
-              <a
-                key={i}
-                href={n.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2.5 hover:border-slate-600 transition group"
+        {/* ── Tab: 個股 ── */}
+        {activeTab === "stock" && (
+          <div className="space-y-4">
+            {/* 搜尋列 */}
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                value={input}
+                onChange={(e) => setInput(e.target.value.toUpperCase())}
+                placeholder="例如：TSLA、AAPL、2330.TW"
+                onKeyDown={(e) => e.key === "Enter" && fetchAll()}
+              />
+              <button
+                onClick={() => fetchAll()}
+                disabled={loading || !input}
+                className="px-4 py-2 rounded-2xl bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 text-sm font-medium transition"
               >
-                <div className="text-sm text-slate-200 group-hover:text-white leading-snug">
-                  {n.title}
+                {loading ? "查詢中..." : "查詢"}
+              </button>
+            </div>
+
+            {err && <div className="text-xs text-red-400">錯誤：{err}</div>}
+
+            {/* 載入中：顯示 Skeleton */}
+            {loading && (
+              <>
+                <SkeletonCard />
+                <SkeletonChart />
+                <SkeletonNews />
+              </>
+            )}
+
+            {/* 股價卡片 */}
+            {!loading && data && (
+              <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-4 flex items-start justify-between">
+                <div>
+                  <div className="text-slate-400 text-xs mb-1">{data.symbol}</div>
+                  <div className="flex items-baseline gap-3">
+                    <div className="text-3xl font-bold">${data.price}</div>
+                    {data.change_pct != null && (
+                      <div className={`text-sm font-medium ${data.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {data.change >= 0 ? "+" : ""}{data.change}（{data.change_pct >= 0 ? "+" : ""}{data.change_pct}%）
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  {n.publisher}{n.time ? ` · ${timeAgo(n.time)}` : ""}
-                </div>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {!data && !err && !loading && watchlist.length === 0 && (
-          <p className="text-xs text-slate-500">
-            支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）
-          </p>
-        )}
-
-        {/* 投資組合追蹤 */}
-        <PortfolioSection />
-
-        {/* ETF 長期分析區塊 */}
-        <div className="border-t border-slate-800 pt-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-slate-300">ETF 長期分析</div>
-            <div className="flex gap-1">
-              {[["1mo","1M"],["3mo","3M"],["6mo","6M"],["1y","1Y"],["3y","3Y"],["5y","5Y"]].map(([val, label]) => (
                 <button
-                  key={val}
-                  onClick={() => { setEtfPeriod(val); fetchEtf(val); }}
-                  className={`px-2 py-1 rounded-lg text-xs transition ${
-                    etfPeriod === val
-                      ? "bg-indigo-500 text-white"
-                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  onClick={() => isInWatchlist ? removeFromWatchlist(data.symbol) : addToWatchlist(data.symbol)}
+                  className={`text-xs px-3 py-1.5 rounded-xl border transition ${
+                    isInWatchlist
+                      ? "border-red-500/50 text-red-400 hover:bg-red-500/10"
+                      : "border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
                   }`}
                 >
-                  {label}
+                  {isInWatchlist ? "移除自選" : "+ 加入自選"}
                 </button>
-              ))}
+              </div>
+            )}
+
+            {/* K 線圖 */}
+            {!loading && chartData && (
+              <PriceChart data={chartData} rsiData={rsiData} showMA20 showMA50 />
+            )}
+
+            {/* 個股新聞 */}
+            {!loading && news.length > 0 && (
+              <div className="space-y-1">
+                <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">最新消息</div>
+                {news.map((n, i) => (
+                  <a
+                    key={i}
+                    href={n.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2.5 hover:border-slate-600 transition group"
+                  >
+                    <div className="text-sm text-slate-200 group-hover:text-white leading-snug">{n.title}</div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {n.publisher}{n.time ? ` · ${timeAgo(n.time)}` : ""}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {!data && !err && !loading && (
+              <p className="text-xs text-slate-500">支援美股（AAPL、TSLA）及台股（2330.TW、0050.TW）</p>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab: 投資組合 ── */}
+        {activeTab === "portfolio" && <PortfolioSection />}
+
+        {/* ── Tab: ETF 分析 ── */}
+        {activeTab === "etf" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium text-slate-300">ETF 長期分析</div>
+              <div className="flex gap-1">
+                {[["1mo","1M"],["3mo","3M"],["6mo","6M"],["1y","1Y"],["3y","3Y"],["5y","5Y"]].map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => { setEtfPeriod(val); fetchEtf(val); }}
+                    className={`px-2 py-1 rounded-lg text-xs transition ${
+                      etfPeriod === val
+                        ? "bg-indigo-500 text-white"
+                        : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
             </div>
-          </div>
-
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={etfInput}
-              onChange={(e) => setEtfInput(e.target.value.toUpperCase())}
-              placeholder="最多 5 檔，逗號分隔，例如：VOO,VTI,QQQ,0050.TW"
-              onKeyDown={(e) => e.key === "Enter" && fetchEtf()}
-            />
-            <button
-              onClick={() => fetchEtf()}
-              disabled={etfLoading || !etfInput}
-              className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
-            >
-              {etfLoading ? "載入中..." : "分析"}
-            </button>
-          </div>
-          {etfLoading && <div className="text-xs text-slate-500">載入中...</div>}
-          {etfErr && <div className="text-xs text-red-400">錯誤：{etfErr}</div>}
-
-          {etfData && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
-              <CompareChart data={etfData} />
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-slate-500 border-b border-slate-800">
-                    <th className="text-left py-1">ETF</th>
-                    <th className="text-right py-1">總報酬</th>
-                    <th className="text-right py-1">年化(CAGR)</th>
-                    <th className="text-right py-1">最大回撤</th>
-                    <th className="text-right py-1">夏普</th>
-                    <th className="text-right py-1">殖利率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {etfData.map((d) => (
-                    <tr key={d.symbol} className="border-b border-slate-800/50">
-                      <td className="py-1.5 font-medium">{d.symbol}</td>
-                      <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {d.total_return >= 0 ? "+" : ""}{d.total_return}%
-                      </td>
-                      <td className={`text-right ${d.cagr >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {d.cagr >= 0 ? "+" : ""}{d.cagr}%
-                      </td>
-                      <td className="text-right text-red-400">{d.max_drawdown}%</td>
-                      <td className="text-right text-slate-300">{d.sharpe ?? "—"}</td>
-                      <td className="text-right text-slate-300">{d.div_yield != null ? `${d.div_yield}%` : "—"}</td>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                value={etfInput}
+                onChange={(e) => setEtfInput(e.target.value.toUpperCase())}
+                placeholder="最多 5 檔，逗號分隔，例如：VOO,VTI,QQQ,0050.TW"
+                onKeyDown={(e) => e.key === "Enter" && fetchEtf()}
+              />
+              <button
+                onClick={() => fetchEtf()}
+                disabled={etfLoading || !etfInput}
+                className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
+              >{etfLoading ? "載入中..." : "分析"}</button>
+            </div>
+            {etfLoading && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 animate-pulse space-y-3">
+                <div className="h-48 bg-slate-800 rounded-xl" />
+                <div className="h-24 bg-slate-800 rounded-xl" />
+              </div>
+            )}
+            {etfErr && <div className="text-xs text-red-400">錯誤：{etfErr}</div>}
+            {etfData && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
+                <CompareChart data={etfData} />
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-800">
+                      <th className="text-left py-1">ETF</th>
+                      <th className="text-right py-1">總報酬</th>
+                      <th className="text-right py-1">年化(CAGR)</th>
+                      <th className="text-right py-1">最大回撤</th>
+                      <th className="text-right py-1">夏普</th>
+                      <th className="text-right py-1">殖利率</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* 多股比較區塊 */}
-        <div className="border-t border-slate-800 pt-4 space-y-3">
-          <div className="text-sm font-medium text-slate-300">多股比較</div>
-          <div className="flex gap-2">
-            <input
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
-              value={compareInput}
-              onChange={(e) => setCompareInput(e.target.value.toUpperCase())}
-              placeholder="用逗號分隔，例如：AAPL,TSLA,NVDA"
-              onKeyDown={(e) => e.key === "Enter" && fetchCompare()}
-            />
-            <button
-              onClick={fetchCompare}
-              disabled={compareLoading || !compareInput}
-              className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
-            >
-              {compareLoading ? "載入中..." : "比較"}
-            </button>
+                  </thead>
+                  <tbody>
+                    {etfData.map((d) => (
+                      <tr key={d.symbol} className="border-b border-slate-800/50">
+                        <td className="py-1.5 font-medium">{d.symbol}</td>
+                        <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {d.total_return >= 0 ? "+" : ""}{d.total_return}%
+                        </td>
+                        <td className={`text-right ${d.cagr >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {d.cagr >= 0 ? "+" : ""}{d.cagr}%
+                        </td>
+                        <td className="text-right text-red-400">{d.max_drawdown}%</td>
+                        <td className="text-right text-slate-300">{d.sharpe ?? "—"}</td>
+                        <td className="text-right text-slate-300">{d.div_yield != null ? `${d.div_yield}%` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
+        )}
 
-          {compareErr && <div className="text-xs text-red-400">錯誤：{compareErr}</div>}
-
-          {compareData && (
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
-              <div className="text-xs text-slate-400">60 天相對報酬（起點 = 0%）</div>
-              <CompareChart data={compareData} />
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-slate-500 border-b border-slate-800">
-                    <th className="text-left py-1">代號</th>
-                    <th className="text-right py-1">現價</th>
-                    <th className="text-right py-1">今日</th>
-                    <th className="text-right py-1">60 天報酬</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compareData.map((d) => (
-                    <tr key={d.symbol} className="border-b border-slate-800/50">
-                      <td className="py-1.5 font-medium">{d.symbol}</td>
-                      <td className="text-right text-slate-300">${d.price ?? "—"}</td>
-                      <td className={`text-right ${d.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {d.change_pct != null ? `${d.change_pct >= 0 ? "+" : ""}${d.change_pct}%` : "—"}
-                      </td>
-                      <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {d.total_return >= 0 ? "+" : ""}{d.total_return}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* ── Tab: 多股比較 ── */}
+        {activeTab === "compare" && (
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-slate-300">多股比較</div>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                value={compareInput}
+                onChange={(e) => setCompareInput(e.target.value.toUpperCase())}
+                placeholder="用逗號分隔，例如：AAPL,TSLA,NVDA"
+                onKeyDown={(e) => e.key === "Enter" && fetchCompare()}
+              />
+              <button
+                onClick={fetchCompare}
+                disabled={compareLoading || !compareInput}
+                className="px-4 py-2 rounded-2xl bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 text-sm font-medium transition"
+              >{compareLoading ? "載入中..." : "比較"}</button>
             </div>
-          )}
-        </div>
+            {compareLoading && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 animate-pulse">
+                <div className="h-48 bg-slate-800 rounded-xl" />
+              </div>
+            )}
+            {compareErr && <div className="text-xs text-red-400">錯誤：{compareErr}</div>}
+            {compareData && (
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 space-y-4">
+                <div className="text-xs text-slate-400">60 天相對報酬（起點 = 0%）</div>
+                <CompareChart data={compareData} />
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-800">
+                      <th className="text-left py-1">代號</th>
+                      <th className="text-right py-1">現價</th>
+                      <th className="text-right py-1">今日</th>
+                      <th className="text-right py-1">60 天報酬</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compareData.map((d) => (
+                      <tr key={d.symbol} className="border-b border-slate-800/50">
+                        <td className="py-1.5 font-medium">{d.symbol}</td>
+                        <td className="text-right text-slate-300">${d.price ?? "—"}</td>
+                        <td className={`text-right ${d.change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {d.change_pct != null ? `${d.change_pct >= 0 ? "+" : ""}${d.change_pct}%` : "—"}
+                        </td>
+                        <td className={`text-right ${d.total_return >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {d.total_return >= 0 ? "+" : ""}{d.total_return}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </main>
   );
