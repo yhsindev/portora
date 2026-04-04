@@ -1,13 +1,20 @@
-import { auth } from "@/lib/auth";
+import { getServerSession } from "next-auth";
 import { supabase } from "@/lib/supabase";
+import GoogleProvider from "next-auth/providers/google";
 
-// GET /api/watchlist → 取得目前使用者的自選股代號清單
+const authOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
+  providers: [GoogleProvider({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  })],
+};
+
 export async function GET() {
-  const session = await auth();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return Response.json({ error: "請先登入" }, { status: 401 });
   }
-
   const { data, error } = await supabase
     .from("watchlist")
     .select("symbol")
@@ -18,17 +25,14 @@ export async function GET() {
   return Response.json({ symbols: data.map((r) => r.symbol) });
 }
 
-// POST /api/watchlist  body: { symbol: "TSLA" } → 新增自選股
 export async function POST(req) {
-  const session = await auth();
+  const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return Response.json({ error: "請先登入" }, { status: 401 });
   }
-
   const { symbol } = await req.json();
   if (!symbol) return Response.json({ error: "缺少 symbol" }, { status: 400 });
 
-  // upsert：已存在就忽略，不存在就新增
   const { error } = await supabase
     .from("watchlist")
     .upsert({ user_email: session.user.email, symbol: symbol.toUpperCase() });
