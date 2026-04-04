@@ -46,6 +46,8 @@ export default function Home() {
 
   const [watchlist, setWatchlist] = useState([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
+  const [addingToWatchlist, setAddingToWatchlist] = useState(false);
+  const [groupInput, setGroupInput] = useState("自選股");
 
   const [etfInput, setEtfInput] = useState("VOO,0050.TW,006208.TW");
   const [etfPeriod, setEtfPeriod] = useState("1y");
@@ -71,26 +73,28 @@ export default function Home() {
     refreshWatchlist();
   }, [session]); // session 改變（登入/登出）時重新載入自選股
 
-  // 取得自選股代號：已登入 → 從 Supabase（via API route）；未登入 → localStorage
   const refreshWatchlist = async () => {
     setWatchlistLoading(true);
     try {
-      let symbols = [];
+      // 登入：從 Supabase 取得 [{symbol, group_name}]
+      // 未登入：localStorage 的純代號陣列，統一包成同樣格式
+      let items = [];
       if (session) {
         const res = await fetch("/api/watchlist");
         const json = await res.json();
-        symbols = json.symbols || [];
+        items = json.items || [];
       } else {
-        symbols = loadSymbols();
+        items = loadSymbols().map((s) => ({ symbol: s, group_name: "自選股" }));
       }
-      if (symbols.length === 0) { setWatchlist([]); return; }
+      if (items.length === 0) { setWatchlist([]); return; }
 
-      // 拿到代號後，並行抓即時報價
+      // 並行抓即時報價，再把 group_name 合併進去
       const results = await Promise.all(
-        symbols.map((sym) =>
-          fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(sym)}`)
+        items.map(({ symbol, group_name }) =>
+          fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(symbol)}`)
             .then((r) => r.json())
-            .catch(() => ({ symbol: sym, price: null, change_pct: null }))
+            .then((q) => ({ ...q, group_name }))
+            .catch(() => ({ symbol, price: null, change_pct: null, group_name }))
         )
       );
       setWatchlist(results.filter((r) => !r.error));
@@ -101,17 +105,18 @@ export default function Home() {
     }
   };
 
-  const addToWatchlist = async (symbol) => {
+  const addToWatchlist = async (symbol, group_name = "自選股") => {
     if (session) {
       await fetch("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol }),
+        body: JSON.stringify({ symbol, group_name }),
       });
     } else {
       const symbols = loadSymbols();
       if (!symbols.includes(symbol)) saveSymbols([...symbols, symbol]);
     }
+    setAddingToWatchlist(false);
     refreshWatchlist();
   };
 
@@ -250,10 +255,9 @@ export default function Home() {
           )}
         </div>
 
-        {/* 自選股（常駐於所有 Tab 上方，點擊自動切到個股 Tab） */}
+        {/* 自選股（常駐於所有 Tab 上方，依群組分類顯示） */}
         {(watchlist.length > 0 || watchlistLoading) && (
-          <div className="space-y-2">
-            <div className="text-xs text-slate-500 font-medium uppercase tracking-wide">自選股</div>
+          <div className="space-y-3">
             {watchlistLoading ? (
               <div className="flex gap-2">
                 {[0, 1, 2].map((i) => (
@@ -261,39 +265,48 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="flex gap-2 flex-wrap">
-                {watchlist.map((w) => (
-                  <button
-                    key={w.symbol}
-                    onClick={() => {
-                      setInput(w.symbol);
-                      setActiveTab("stock");
-                      fetchAll(w.symbol);
-                    }}
-                    className={`group flex items-center gap-2 border rounded-2xl px-3 py-2 text-sm transition ${
-                      data?.symbol === w.symbol
-                        ? "bg-indigo-500/20 border-indigo-500"
-                        : "bg-slate-900 border-slate-800 hover:border-slate-600"
-                    }`}
-                  >
-                    <span className="font-medium">{w.symbol}</span>
-                    {w.price != null ? (
-                      <>
-                        <span className="text-slate-300">${w.price}</span>
-                        <span className={w.change_pct >= 0 ? "text-green-400" : "text-red-400"}>
-                          {w.change_pct >= 0 ? "+" : ""}{w.change_pct}%
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-slate-600 text-xs">N/A</span>
-                    )}
-                    <span
-                      onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.symbol); }}
-                      className="text-slate-600 hover:text-red-400 text-xs transition ml-1"
-                    >✕</span>
-                  </button>
-                ))}
-              </div>
+              // 按 group_name 分組顯示
+              Object.entries(
+                watchlist.reduce((acc, w) => {
+                  const g = w.group_name || "自選股";
+                  if (!acc[g]) acc[g] = [];
+                  acc[g].push(w);
+                  return acc;
+                }, {})
+              ).map(([group, stocks]) => (
+                <div key={group} className="space-y-1.5">
+                  <div className="text-xs text-slate-500 font-medium">{group}</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {stocks.map((w) => (
+                      <button
+                        key={w.symbol}
+                        onClick={() => { setInput(w.symbol); setActiveTab("stock"); fetchAll(w.symbol); }}
+                        className={`group flex items-center gap-2 border rounded-2xl px-3 py-2 text-sm transition ${
+                          data?.symbol === w.symbol
+                            ? "bg-indigo-500/20 border-indigo-500"
+                            : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                        }`}
+                      >
+                        <span className="font-medium">{w.symbol}</span>
+                        {w.price != null ? (
+                          <>
+                            <span className="text-slate-300">${w.price}</span>
+                            <span className={w.change_pct >= 0 ? "text-green-400" : "text-red-400"}>
+                              {w.change_pct >= 0 ? "+" : ""}{w.change_pct}%
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-slate-600 text-xs">N/A</span>
+                        )}
+                        <span
+                          onClick={(e) => { e.stopPropagation(); removeFromWatchlist(w.symbol); }}
+                          className="text-slate-600 hover:text-red-400 text-xs transition ml-1"
+                        >✕</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         )}
@@ -362,16 +375,42 @@ export default function Home() {
                   </div>
                   <div className="text-xs text-slate-500 mt-1">來源：{data.source}</div>
                 </div>
-                <button
-                  onClick={() => isInWatchlist ? removeFromWatchlist(data.symbol) : addToWatchlist(data.symbol)}
-                  className={`text-xs px-3 py-1.5 rounded-xl border transition ${
-                    isInWatchlist
-                      ? "border-red-500/50 text-red-400 hover:bg-red-500/10"
-                      : "border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
-                  }`}
-                >
-                  {isInWatchlist ? "移除自選" : "+ 加入自選"}
-                </button>
+                {isInWatchlist ? (
+                  <button
+                    onClick={() => removeFromWatchlist(data.symbol)}
+                    className="text-xs px-3 py-1.5 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition"
+                  >移除自選</button>
+                ) : addingToWatchlist ? (
+                  <div className="flex gap-1 items-center">
+                    <input
+                      className="w-24 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-xs outline-none focus:border-indigo-400"
+                      value={groupInput}
+                      onChange={(e) => setGroupInput(e.target.value)}
+                      placeholder="群組名稱"
+                      list="group-suggestions"
+                      onKeyDown={(e) => e.key === "Enter" && addToWatchlist(data.symbol, groupInput)}
+                      autoFocus
+                    />
+                    <datalist id="group-suggestions">
+                      {[...new Set(watchlist.map((w) => w.group_name).filter(Boolean))].map((g) => (
+                        <option key={g} value={g} />
+                      ))}
+                    </datalist>
+                    <button
+                      onClick={() => addToWatchlist(data.symbol, groupInput)}
+                      className="text-xs px-2 py-1 rounded-lg bg-indigo-500 hover:bg-indigo-400 transition"
+                    >確認</button>
+                    <button
+                      onClick={() => setAddingToWatchlist(false)}
+                      className="text-xs text-slate-500 hover:text-slate-300 transition"
+                    >✕</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setGroupInput("自選股"); setAddingToWatchlist(true); }}
+                    className="text-xs px-3 py-1.5 rounded-xl border border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 transition"
+                  >+ 加入自選</button>
+                )}
               </div>
             )}
 
