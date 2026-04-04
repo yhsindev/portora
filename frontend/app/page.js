@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import PriceChart from "@/components/PriceChart";
 import CompareChart from "@/components/CompareChart";
 import PortfolioSection from "@/components/PortfolioSection";
@@ -33,6 +34,7 @@ function saveSymbols(symbols) {
 }
 
 export default function Home() {
+  const { data: session } = useSession();
   const [input, setInput] = useState("TSLA");
   const [data, setData] = useState(null);
   const [chartData, setChartData] = useState(null);
@@ -67,17 +69,23 @@ export default function Home() {
 
   useEffect(() => {
     refreshWatchlist();
-  }, []);
+  }, [session]); // session 改變（登入/登出）時重新載入自選股
 
-  // 從 localStorage 讀出代號，並行呼叫後端取得即時報價
+  // 取得自選股代號：已登入 → 從 Supabase（via API route）；未登入 → localStorage
   const refreshWatchlist = async () => {
     setWatchlistLoading(true);
     try {
-      const symbols = loadSymbols();
-      if (symbols.length === 0) {
-        setWatchlist([]);
-        return;
+      let symbols = [];
+      if (session) {
+        const res = await fetch("/api/watchlist");
+        const json = await res.json();
+        symbols = json.symbols || [];
+      } else {
+        symbols = loadSymbols();
       }
+      if (symbols.length === 0) { setWatchlist([]); return; }
+
+      // 拿到代號後，並行抓即時報價
       const results = await Promise.all(
         symbols.map((sym) =>
           fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(sym)}`)
@@ -93,16 +101,26 @@ export default function Home() {
     }
   };
 
-  const addToWatchlist = (symbol) => {
-    const symbols = loadSymbols();
-    if (!symbols.includes(symbol)) {
-      saveSymbols([...symbols, symbol]);
+  const addToWatchlist = async (symbol) => {
+    if (session) {
+      await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol }),
+      });
+    } else {
+      const symbols = loadSymbols();
+      if (!symbols.includes(symbol)) saveSymbols([...symbols, symbol]);
     }
     refreshWatchlist();
   };
 
-  const removeFromWatchlist = (symbol) => {
-    saveSymbols(loadSymbols().filter((s) => s !== symbol));
+  const removeFromWatchlist = async (symbol) => {
+    if (session) {
+      await fetch(`/api/watchlist/${encodeURIComponent(symbol)}`, { method: "DELETE" });
+    } else {
+      saveSymbols(loadSymbols().filter((s) => s !== symbol));
+    }
     setWatchlist((prev) => prev.filter((w) => w.symbol !== symbol));
   };
 
@@ -206,7 +224,31 @@ export default function Home() {
       <div className="max-w-3xl mx-auto px-4 pt-6 pb-12 space-y-4">
 
         {/* Header */}
-        <h1 className="text-xl font-semibold tracking-tight">Portora</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold tracking-tight">Portora</h1>
+          {session ? (
+            <div className="flex items-center gap-2">
+              {session.user?.image && (
+                <img src={session.user.image} alt="avatar" className="w-7 h-7 rounded-full" />
+              )}
+              <span className="text-xs text-slate-400 hidden sm:block">{session.user?.name}</span>
+              <button
+                onClick={() => signOut()}
+                className="text-xs px-3 py-1.5 rounded-xl border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200 transition"
+              >登出</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => signIn("google")}
+              className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-xl border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-400 transition"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+              </svg>
+              Google 登入
+            </button>
+          )}
+        </div>
 
         {/* 自選股（常駐於所有 Tab 上方，點擊自動切到個股 Tab） */}
         {(watchlist.length > 0 || watchlistLoading) && (
