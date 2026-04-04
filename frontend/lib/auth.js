@@ -2,16 +2,16 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  trustHost: true, // 本地開發與 Vercel 部署都需要，否則 NextAuth 會拒絕非 HTTPS 來源
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
-  // session 回呼：把 user.email 帶進 session，供 API routes 識別使用者
   callbacks: {
     session({ session }) {
-      return session; // session.user.email 預設已包含
+      return session;
     },
   },
 });
