@@ -207,19 +207,20 @@ export default function Home() {
     setNews([]);
 
     try {
-      const [quoteRes, histRes, newsRes] = await Promise.all([
+      // quote 和 history 是核心請求，一起發出
+      const [quoteRes, histRes] = await Promise.all([
         fetch(`${BASE}/api/quote?symbol=${encodeURIComponent(target)}`),
         fetch(`${BASE}/api/history?symbol=${encodeURIComponent(target)}&days=120`),
-        fetch(`${BASE}/api/news?symbol=${encodeURIComponent(target)}`),
       ]);
 
       const quoteJson = await quoteRes.json();
       const histJson  = await histRes.json();
-      const newsJson  = await newsRes.json();
 
-      if (!newsJson.error && newsJson.news?.length) {
-        setNews(newsJson.news);
-      }
+      // news 是非核心，獨立發出，失敗不影響主流程
+      fetch(`${BASE}/api/news?symbol=${encodeURIComponent(target)}`)
+        .then((r) => r.ok ? r.json() : { news: [] })
+        .then((json) => { if (json.news?.length) setNews(json.news); })
+        .catch(() => {});
 
       if (quoteJson.error) throw new Error(quoteJson.error);
       setData(quoteJson);
